@@ -2,7 +2,6 @@ package root
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -28,22 +27,17 @@ const logo = `
 var (
 	logoStyle = lipgloss.NewStyle().
 			PaddingTop(2).
-			Foreground(lipgloss.Color("#01FAC6")).
-			Bold(true)
+			Foreground(lipgloss.Color("#01FAC6"))
 	titleStyle = lipgloss.NewStyle().
 			MarginTop(1).
 			MarginBottom(2).
 			PaddingLeft(1).
-			Background(lipgloss.Color("#01FAC6")).
-			Foreground(lipgloss.Color("0")).
 			Bold(true)
 	textStyle = lipgloss.NewStyle().
-			PaddingLeft(1).
-			Foreground(lipgloss.Color("#01FAC6"))
+			PaddingLeft(1)
 	activeStyle = lipgloss.NewStyle().
 			PaddingLeft(1).
-			Background(lipgloss.Color("#C9FCE9")).
-			Foreground(lipgloss.Color("#364B44")).
+			Foreground(lipgloss.Color("#FF6E81")).
 			Bold(true)
 )
 
@@ -228,9 +222,11 @@ func (m RootModel) View() string {
 	}
 
 	// The footer
-	helpView := m.help.View(m.keys)
-	spacerView := strings.Repeat("\n", 2)
-	s = append(s, spacerView, helpView)
+
+	s = append(s, titleStyle.MarginBottom(1).Render("? toggle help / q to quit"))
+	if m.help.ShowAll {
+		s = append(s, m.help.View(m.keys))
+	}
 
 	// Send the sting back to BubbleTea for rendering
 	return lipgloss.JoinVertical(lipgloss.Top, s...)

@@ -7,79 +7,113 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/timer"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	textStyle   = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#FFE4E4"))
-	activeStyle = lipgloss.
-			NewStyle().
-			Align(lipgloss.Left).
-			Background(lipgloss.Color("#FFE4E4")).
-			Foreground(lipgloss.Color("#C3515C")).
-			Bold(true)
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FFE4E4")).
-			Background(lipgloss.Color("#C3525C")).
-			MarginTop(1).
-			MarginBottom(2)
-)
+const logo = `
+   __  ____  _ __
+  / / / / /_(_) /____
+ / / / / __/ / / ___/
+/ /_/ / /_/ / (__  )
+\____/\__/_/_/____/
+`
 
-type optID int
+type choiceID int
 
 const (
-	idSearch optID = iota
+	idTable choiceID = iota
 	idTimer
 	idPing
 	idProgress
 )
 
-var stateKeys = map[optID]string{
-	idSearch:   "search",
-	idTimer:    "timer",
-	idPing:     "ping",
-	idProgress: "progress",
+var (
+	logoStyle = lipgloss.
+			NewStyle().
+			PaddingTop(2).
+			Foreground(lipgloss.Color("#01FAC6"))
+	textStyle   = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#FFE4E4"))
+	activeStyle = lipgloss.
+			NewStyle().
+			Align(lipgloss.Left).
+			Foreground(lipgloss.Color("#FF6E81")).
+			Bold(true)
+	titleStyle = lipgloss.NewStyle().
+			MarginTop(1).
+			MarginBottom(2).
+			Bold(true)
+	checkedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00C57A"))
+)
+
+type choice struct {
+	label string
+	key   choiceID
 }
 
 type tickMsg time.Time
 
 type UtilsModel struct {
-	state    map[string]bool
-	choices  []string
-	cursor   int
-	timer    timer.Model
-	progress progress.Model
+	choices       []choice
+	state         map[choice]bool
+	cursor        int
+	timerSpent    bool
+	timer         timer.Model
+	progressSpent bool
+	progress      progress.Model
+	table         table.Model
 }
 
 func NewModel() UtilsModel {
 	return UtilsModel{
-		choices: []string{
-			"Search",
-			"Timer",
-			"Ping Google",
-			"Progress",
+		choices: []choice{
+			idTable:    {"Table", idTable},
+			idTimer:    {"Timer", idTimer},
+			idPing:     {"Ping Google", idPing},
+			idProgress: {"Progress", idProgress},
 		},
-		state: map[string]bool{
-			"search":   false,
-			"timer":    false,
-			"ping":     false,
-			"progress": false,
-		},
-		timer:    timer.NewWithInterval(10*time.Second, time.Millisecond),
-		progress: progress.New(progress.WithScaledGradient("#465979", "#FF878E")),
+		state:      map[choice]bool{},
+		timerSpent: false,
+		timer:      timer.NewWithInterval(5*time.Second, time.Millisecond),
+
+		progressSpent: false,
+		progress:      progress.New(progress.WithScaledGradient("#6A6094", "#FF6E81")),
 		// progress: progress.New(progress.WithDefaultGradient()),
+		table: newTable(),
 	}
 }
 
 func (m UtilsModel) Init() tea.Cmd {
-	// return m.timer.Init()
 	return nil
 }
 
 func (m UtilsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Prob refactor this to focus update/actions based on the
+	// current choice, if it's active and focused/focusable
+
+	// log.Println("utils.Update msg:", msg)
+	log.Println("utils.m.table.focus msg:", msg, m.table.Focused())
+	if m.table.Focused() {
+		log.Println("Table is focused")
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "backspace":
+				m.setState(idTable, false)
+				m.table.Blur()
+			case "enter":
+				log.Printf("Let's go to %s!", m.table.SelectedRow()[1])
+			}
+		}
+
+		var cmd tea.Cmd
+		m.table, cmd = m.table.Update(msg)
+
+		return m, cmd
+	}
+
 	// log.Println("utils.Update msg:", msg)
 	switch msg := msg.(type) {
 	// Is it a key press?
@@ -97,29 +131,12 @@ func (m UtilsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "enter", " ":
-			m.toggleState(m.cursor)
-
-			if m.isHighlighted(idPing) && m.isSelected(idPing) {
-				return m, pingGoogle()
-			}
-
-			if m.isHighlighted(idTimer) {
-				if !m.isSelected(idTimer) && m.timer.Running() {
-					return m, m.stopTimer()
-				}
-
-				return m, m.startTimer()
-			}
-
-			if m.isHighlighted(idProgress) && m.isSelected(idProgress) {
-				log.Println("progress bar started...")
-				return m, tickCmd()
-			}
+			m.toggleCurrentState()
+			return m.handleCurrentChoice(msg)
 		}
 
 	// Is it the timer?
 	case timer.TickMsg:
-		log.Println("timer.TickMsg")
 		var cmd tea.Cmd
 		m.timer, cmd = m.timer.Update(msg)
 		return m, cmd
@@ -132,12 +149,12 @@ func (m UtilsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case timer.TimeoutMsg:
-		// m.quitting = true
+		m.setState(idTimer, false)
+		m.timerSpent = true
 		return m, nil
 
 	// Is it the progress Ticker?
 	case tickMsg:
-		log.Println("progress tickMsg")
 		if m.progress.Percent() == 1.0 {
 			return m, nil
 		}
@@ -145,11 +162,10 @@ func (m UtilsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Note that you can also use progress.Model.SetPercent to set the
 		// percentage value explicitly, too.
 		cmd := m.progress.IncrPercent(0.25)
-		return m, tea.Batch(tickCmd(), cmd)
+		return m, tea.Batch(startProgress(), cmd)
 
 	// FrameMsg is sent when the progress bar wants to animate itself
 	case progress.FrameMsg:
-		log.Println("progress frame msg")
 		progressModel, cmd := m.progress.Update(msg)
 		m.progress = progressModel.(progress.Model)
 		return m, cmd
@@ -158,9 +174,38 @@ func (m UtilsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m UtilsModel) handleCurrentChoice(msg tea.Msg) (UtilsModel, tea.Cmd) {
+	switch m.currentChoice().key {
+	case idTable:
+		if m.currentChoiceActive() {
+			m.table.Focus()
+		}
+
+		var cmd tea.Cmd
+		m.table, cmd = m.table.Update(tableFocusMsg())
+
+		return m, cmd
+	case idTimer:
+		if m.currentChoiceActive() {
+			return m, m.startTimer()
+		}
+
+		if m.timer.Running() {
+			return m, m.stopTimer()
+		}
+
+		return m, nil
+	case idPing:
+		return m, pingGoogle()
+	case idProgress:
+		return m, startProgress()
+	default:
+		return m, nil
+	}
+}
+
 func (m UtilsModel) View() string {
-	s := []string{}
-	s = append(s, titleStyle.Render("We push to ..."))
+	s := []string{logoStyle.Render(logo)}
 
 	for i, choice := range m.choices {
 		// Is the cursor pointing at this choice?
@@ -171,25 +216,29 @@ func (m UtilsModel) View() string {
 
 		// Is this choice selected?
 		checked := " " // not selected
-		if m.isIndexSelected(i) {
+		if m.choiceActive(choice) {
 			checked = "✓" // selected!
 		}
 
 		// Render the row
 		if i == m.cursor {
-			s = append(s, activeStyle.Render(fmt.Sprintf("%s [%s] %s", cursor, checked, choice)))
+			s = append(s, activeStyle.Render(fmt.Sprintf(" %s [%s] %s", cursor, checked, choice.label)))
 		} else {
-			s = append(s, textStyle.Render(fmt.Sprintf(" %s [%s] %s", cursor, checked, choice)))
+			s = append(s,
+				fmt.Sprintf("  %s%s%s",
+					textStyle.Inline(true).Render(cursor+" ["),
+					checkedStyle.Inline(true).Render(checked),
+					textStyle.Inline(true).Render("]"+choice.label),
+				),
+			)
 		}
 	}
 
-	if m.timer.Running() || m.timer.Timedout() {
-		s = append(s, "\nExiting in "+m.timer.View())
-	}
+	// Table view
+	s = append(s, "\n", tableStyle.Render(m.table.View(), "\n"))
+	// return baseStyle.Render(m.table.View()) + "\n"
 
-	if m.timer.Timedout() {
-		s = append(s, "All done!")
-	}
+	s = append(s, "\nTimer running "+m.timer.View())
 
 	// if !m.quitting {
 	// 	s = "Exiting in " + s
@@ -215,12 +264,11 @@ func pingGoogle() tea.Cmd {
 	url := "https://google.com"
 
 	return func() tea.Msg {
-		log.Println("pinged google init...")
 		time.Sleep(5 * time.Second)
 		c := &http.Client{
 			Timeout: 5 * time.Second,
 		}
-		log.Println("pinged google exec...")
+
 		res, err := c.Get(url)
 		if err != nil {
 			var msg PingMsg = "ping:err"
@@ -228,46 +276,47 @@ func pingGoogle() tea.Cmd {
 		}
 		defer res.Body.Close()
 
-		log.Println("pinged google successfully!")
-
 		var msg PingMsg = "ping:ok"
+		log.Println("ping:ok")
 		return msg
 	}
 }
 
-func tickCmd() tea.Cmd {
+func startProgress() tea.Cmd {
 	return tea.Tick(time.Second*1, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
 
-func (m UtilsModel) startTimer() tea.Cmd {
-	log.Println("startTimer...")
+func (m *UtilsModel) startTimer() tea.Cmd {
+	if m.timerSpent {
+		m.timer = timer.NewWithInterval(5*time.Second, time.Millisecond)
+		return m.timer.Init()
+	}
+
 	return m.timer.Start()
 }
 
 func (m UtilsModel) stopTimer() tea.Cmd {
-	log.Println("stopTimer...")
 	return m.timer.Stop()
 }
 
-func stateKey(id int) string {
-	return stateKeys[optID(id)]
+func (m UtilsModel) choiceActive(c choice) bool {
+	return m.state[c]
 }
 
-func (m UtilsModel) isIndexSelected(id int) bool {
-	return m.state[stateKey(id)]
+func (m UtilsModel) currentChoiceActive() bool {
+	return m.state[m.currentChoice()]
 }
 
-func (m UtilsModel) isSelected(id optID) bool {
-	return m.state[stateKey(int(id))]
+func (m UtilsModel) toggleCurrentState() {
+	m.state[m.currentChoice()] = !m.state[m.currentChoice()]
 }
 
-func (m UtilsModel) toggleState(id int) {
-	m.state[stateKey(id)] = !m.state[stateKey(id)]
+func (m UtilsModel) setState(id choiceID, state bool) {
+	m.state[m.choices[id]] = state
 }
 
-func (m UtilsModel) isHighlighted(id optID) bool {
-	log.Println("isHighlighted", m.cursor, int(id))
-	return m.cursor == int(id)
+func (m UtilsModel) currentChoice() choice {
+	return m.choices[m.cursor]
 }

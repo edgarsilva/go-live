@@ -11,19 +11,20 @@ import (
 )
 
 var (
+	logoStyle = lipgloss.
+			NewStyle().
+			PaddingTop(2).
+			Foreground(lipgloss.Color("#01FAC6"))
 	textStyle   = lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#EFEDFF"))
 	activeStyle = lipgloss.
 			NewStyle().
-			Align(lipgloss.Left).
-			Background(lipgloss.Color("#EFEDFF")).
-			Foreground(lipgloss.Color("#595A8B")).
+			Foreground(lipgloss.Color("#FF6E81")).
 			Bold(true)
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#EFEDFF")).
-			Background(lipgloss.Color("#595A8B")).
+	titleStyle = lipgloss.
+			NewStyle().
 			MarginTop(1).
-			MarginBottom(2)
+			MarginBottom(2).
+			Bold(true)
 )
 
 // keymap defines a set of keybindings. To work for help it must satisfy
@@ -138,9 +139,16 @@ func (m LiveModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+const logo = `
+   ______      __    _
+  / ____/___  / /   (_)   _____
+ / / __/ __ \/ /   / / | / / _ \
+/ /_/ / /_/ / /___/ /| |/ /  __/
+\____/\____/_____/_/ |___/\___/
+`
+
 func (m LiveModel) View() string {
-	s := []string{}
-	s = append(s, titleStyle.Render("We push to ..."))
+	s := []string{logoStyle.Render(logo)}
 
 	for i, choice := range m.choices {
 		// Is the cursor pointing at this choice?
