@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"go-live/internal/common"
 	"go-live/internal/live"
 	"go-live/internal/utils"
 )
@@ -46,67 +47,11 @@ type optID int
 const (
 	idRoot optID = iota
 	idLive
-	idSearch
 	idUtils
 )
 
-// KeyMap defines a set of keybindings. To work for help it must satisfy
-// key.Map. It could also very easily be a map[string]key.Binding.
-type KeyMap struct {
-	Up   key.Binding
-	Down key.Binding
-	// Right  key.Binding
-	// Left   key.Binding
-	Help   key.Binding
-	Quit   key.Binding
-	Back   key.Binding
-	Select key.Binding
-}
-
-// ShortHelp returns keybindings to be shown in the mini help view. It's part
-// of the key.Map interface.
-func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Quit}
-}
-
-// FullHelp returns keybindings for the expanded help view. It's part of the
-// key.Map interface.
-func (k KeyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Up, k.Down},   // first column
-		{k.Help, k.Quit}, // second column
-	}
-}
-
-var keys = KeyMap{
-	Up: key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "move up"),
-	),
-	Down: key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "move down"),
-	),
-	Help: key.NewBinding(
-		key.WithKeys("?"),
-		key.WithHelp("?", "toggle help"),
-	),
-	Quit: key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
-		key.WithHelp("q", "quit"),
-	),
-	Back: key.NewBinding(
-		key.WithKeys("esc"),
-		key.WithHelp("esc", "to go back"),
-	),
-	Select: key.NewBinding(
-		key.WithKeys("enter", " ", "space"),
-		key.WithHelp("⏎/⌴", "to confirm selection"),
-	),
-}
-
 type RootModel struct {
-	keys    KeyMap
+	keys    common.Keymap
 	state   optID
 	models  map[string]tea.Model
 	current optID
@@ -117,7 +62,7 @@ type RootModel struct {
 
 func NewModel() RootModel {
 	return RootModel{
-		keys:  keys,
+		keys:  common.Keys,
 		state: idRoot,
 		models: map[string]tea.Model{
 			"live":  live.NewModel(),
@@ -125,7 +70,6 @@ func NewModel() RootModel {
 		},
 		choices: []string{
 			"Go Live",
-			"Search DB",
 			"Utils",
 		},
 		help: help.New(),
@@ -140,8 +84,6 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// var cmd tea.Cmd
 	cmds := []tea.Cmd{}
 
-	// log.Printf("root.Update() msg: %v", msg)
-
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// If we set a width on the help menu it can gracefully truncate
@@ -154,9 +96,9 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
-		case key.Matches(msg, m.keys.Back):
-			m.current = idRoot
 		}
+	case common.BackToRootMsg:
+		m.current = idRoot
 	}
 
 	switch m.current {
@@ -237,8 +179,6 @@ func (m RootModel) setCurrent() RootModel {
 	case 0:
 		m.current = idLive
 	case 1:
-		m.current = idSearch
-	case 2:
 		m.current = idUtils
 	default:
 		m.current = idRoot

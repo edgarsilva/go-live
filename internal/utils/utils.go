@@ -2,10 +2,12 @@ package utils
 
 import (
 	"fmt"
+	"go-live/internal/common"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/timer"
@@ -64,10 +66,12 @@ type UtilsModel struct {
 	progressSpent bool
 	progress      progress.Model
 	table         table.Model
+	keys          common.Keymap
 }
 
 func NewModel() UtilsModel {
 	return UtilsModel{
+		keys: common.Keys,
 		choices: []choice{
 			idTable:    {"Table", idTable},
 			idTimer:    {"Timer", idTimer},
@@ -94,16 +98,15 @@ func (m UtilsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// current choice, if it's active and focused/focusable
 
 	// log.Println("utils.Update msg:", msg)
-	log.Println("utils.m.table.focus msg:", msg, m.table.Focused())
+	// log.Println("utils.m.table.focus msg:", msg, m.table.Focused())
 	if m.table.Focused() {
-		log.Println("Table is focused")
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
-			switch msg.String() {
-			case "backspace":
+			switch {
+			case key.Matches(msg, m.keys.Back), key.Matches(msg, m.keys.Blur):
 				m.setState(idTable, false)
 				m.table.Blur()
-			case "enter":
+			case key.Matches(msg, m.keys.Select):
 				log.Printf("Let's go to %s!", m.table.SelectedRow()[1])
 			}
 		}
@@ -119,18 +122,20 @@ func (m UtilsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Is it a key press?
 	case tea.KeyMsg:
 		// Cool, what was the actual key pressed?
-		switch msg.String() {
-		case "up", "k":
+		switch {
+		case key.Matches(msg, m.keys.Back):
+			log.Println("utils.Back to root")
+			return m, common.BackToRoot()
+		case key.Matches(msg, m.keys.Up):
 			if m.cursor > 0 {
 				m.cursor--
 			}
-
-		case "down", "j":
+		case key.Matches(msg, m.keys.Down):
 			if m.cursor < len(m.choices)-1 {
 				m.cursor++
 			}
 
-		case "enter", " ":
+		case key.Matches(msg, m.keys.Select):
 			m.toggleCurrentState()
 			return m.handleCurrentChoice(msg)
 		}

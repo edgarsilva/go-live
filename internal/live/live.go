@@ -2,6 +2,7 @@ package live
 
 import (
 	"fmt"
+	"go-live/internal/common"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -9,6 +10,16 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+const logo = `
+    ____             __
+   / __ \___  ____  / /___  __  __
+  / / / / _ \/ __ \/ / __ \/ / / /
+ / /_/ /  __/ /_/ / / /_/ / /_/ /
+/_____/\___/ .___/_/\____/\__, /
+          /_/            /____/
+
+`
 
 var (
 	logoStyle = lipgloss.
@@ -27,61 +38,8 @@ var (
 			Bold(true)
 )
 
-// keymap defines a set of keybindings. To work for help it must satisfy
-// key.Map. It could also very easily be a map[string]key.Binding.
-type keymap struct {
-	Up     key.Binding
-	Down   key.Binding
-	Help   key.Binding
-	Quit   key.Binding
-	Back   key.Binding
-	Select key.Binding
-}
-
-// ShortHelp returns keybindings to be shown in the mini help view. It's part
-// of the key.Map interface.
-func (k keymap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Help, k.Quit}
-}
-
-// FullHelp returns keybindings for the expanded help view. It's part of the
-// key.Map interface.
-func (k keymap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Up, k.Down},   // first column
-		{k.Help, k.Quit}, // second column
-	}
-}
-
-var keys = keymap{
-	Up: key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "move up"),
-	),
-	Down: key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "move down"),
-	),
-	Help: key.NewBinding(
-		key.WithKeys("?"),
-		key.WithHelp("?", "toggle help"),
-	),
-	Quit: key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
-		key.WithHelp("q", "quit"),
-	),
-	Back: key.NewBinding(
-		key.WithKeys("esc"),
-		key.WithHelp("esc", "to go back"),
-	),
-	Select: key.NewBinding(
-		key.WithKeys("enter", " ", "space"),
-		key.WithHelp("⏎/⌴", "to confirm selection"),
-	),
-}
-
 type LiveModel struct {
-	keys     keymap
+	keys     common.Keymap
 	choices  []string
 	cursor   int
 	selected map[int]struct{}
@@ -90,11 +48,10 @@ type LiveModel struct {
 
 func NewModel() LiveModel {
 	return LiveModel{
-		keys: keys,
+		keys: common.Keys,
 		choices: []string{
 			"To Staging",
 			"To Production",
-			"Back",
 		},
 		selected: make(map[int]struct{}),
 		help:     help.New(),
@@ -139,16 +96,9 @@ func (m LiveModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-const logo = `
-   ______      __    _
-  / ____/___  / /   (_)   _____
- / / __/ __ \/ /   / / | / / _ \
-/ /_/ / /_/ / /___/ /| |/ /  __/
-\____/\____/_____/_/ |___/\___/
-`
-
 func (m LiveModel) View() string {
-	s := []string{logoStyle.Render(logo)}
+	s := []string{}
+	s = append(s, logoStyle.Render(logo), titleStyle.Render("Where are you deploying to?"))
 
 	for i, choice := range m.choices {
 		// Is the cursor pointing at this choice?
